@@ -24,8 +24,22 @@ const htmlEntries = [
   'scan.html'
 ];
 
+const cleanUrlPlugin = () => ({
+  name: 'clean-urls',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      const url = req.url.split('?')[0];
+      if (!url.includes('.') && url !== '/') {
+        req.url = req.url.replace(url, url + '.html');
+      }
+      next();
+    });
+  }
+});
+
 export default defineConfig({
   base,
+  plugins: [cleanUrlPlugin()],
   build: {
     rollupOptions: {
       input: htmlEntries

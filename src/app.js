@@ -141,12 +141,12 @@ function copyToClipboard(value) {
 function getNavLinks(currentPage) {
   const homeLink =
     currentPage === 'home'
-      ? '<a class="is-active" href="./index.html">Home</a>'
-      : '<a href="./index.html">Home</a>';
+      ? '<a class="is-active" href="/">Home</a>'
+      : '<a href="/">Home</a>';
 
   const toolLinks = TOOLS.map((tool) => {
     const active = tool.id === currentPage ? ' class="is-active"' : '';
-    return `<a${active} href="./${tool.file}">${tool.title.replace(' Generator', '').replace(' Formatter', '')}</a>`;
+    return `<a${active} href="/${tool.id}">${tool.title.replace(' Generator', '').replace(' Formatter', '')}</a>`;
   }).join('');
 
   return `${homeLink}${toolLinks}`;
@@ -177,7 +177,7 @@ function createToolCard(tool) {
     <article class="tool-launch-card">
       <h2>${tool.title}</h2>
       <p>${tool.description}</p>
-      <a class="btn" href="./${tool.file}">Open Tool</a>
+      <a class="btn" href="/${tool.id}">Open Tool</a>
     </article>
   `;
 }

@@ -1,6 +1,6 @@
 export function parseUserAgent(ua) {
-  let browser = 'Unknown';
-  let version = 'Unknown';
+  let browser;
+  let version;
   let os = 'Unknown';
   let device = 'Desktop';
 

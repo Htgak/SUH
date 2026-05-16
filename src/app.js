@@ -10,6 +10,11 @@ import { buildDiff } from './utils/diff.js';
 import { decodeBase64, encodeBase64 } from './utils/base64.js';
 import { hashText, SUPPORTED_HASHES } from './utils/hash.js';
 import { parseUserAgent } from './utils/ua.js';
+import { analyzeLog } from './utils/logAnalyzer.js';
+import { identifyHash } from './utils/hashIdentifier.js';
+import { scanUrl } from './utils/urlScanner.js';
+import { extractMetadata } from './utils/metadataViewer.js';
+import { simulateLanScan } from './utils/lanVisualizer.js';
 
 marked.setOptions({ breaks: true, gfm: true });
 
@@ -127,6 +132,36 @@ const TOOLS = [
     title: 'Webcam QR & Barcode Scanner',
     description: 'Scan QR codes and barcodes using your webcam.',
     file: 'scan.html'
+  },
+  {
+    id: 'log',
+    title: 'Log Analyzer',
+    description: 'Detect suspicious IPs, anomalies and failed login patterns.',
+    file: 'log.html'
+  },
+  {
+    id: 'hash-id',
+    title: 'Hash Identifier',
+    description: 'Detect hash types (MD5, SHA256, bcrypt) and analyze entropy.',
+    file: 'hash-id.html'
+  },
+  {
+    id: 'url',
+    title: 'URL Safety Scanner',
+    description: 'Check URLs for phishing indicators and suspicious domains.',
+    file: 'url.html'
+  },
+  {
+    id: 'meta',
+    title: 'Metadata Viewer',
+    description: 'View metadata for images and files locally.',
+    file: 'meta.html'
+  },
+  {
+    id: 'lan',
+    title: 'Local Network Visualizer',
+    description: 'Educational LAN mapping tool and visualizer.',
+    file: 'lan.html'
   }
 ];
 
@@ -1085,7 +1120,7 @@ function renderTablePage(root, tool) {
   root.querySelector('#table-copy-html').addEventListener('click', async () => {
     try {
       await copyToClipboard(codeOutput.textContent);
-    } catch {}
+    } catch { /* ignore */ }
   });
 
   const cssCode = `.custom-table {\n  width: 100%;\n  border-collapse: collapse;\n  margin: 1rem 0;\n}\n.custom-table th, .custom-table td {\n  border: 1px solid #ddd;\n  padding: 8px;\n  text-align: left;\n}\n.custom-table th {\n  background-color: #f4f4f5;\n  font-weight: bold;\n}`;
@@ -1093,7 +1128,7 @@ function renderTablePage(root, tool) {
   root.querySelector('#table-copy-css').addEventListener('click', async () => {
     try {
       await copyToClipboard(cssCode);
-    } catch {}
+    } catch { /* ignore */ }
   });
 
   generateTable();
@@ -1209,13 +1244,13 @@ function renderRsaPage(root, tool) {
   root.querySelector('#rsa-copy-public').addEventListener('click', async () => {
     try {
       await copyToClipboard(rsaPublic.value);
-    } catch {}
+    } catch { /* ignore */ }
   });
 
   root.querySelector('#rsa-copy-private').addEventListener('click', async () => {
     try {
       await copyToClipboard(rsaPrivate.value);
-    } catch {}
+    } catch { /* ignore */ }
   });
 }
 
@@ -1376,7 +1411,7 @@ function renderEscapePage(root, tool) {
       await copyToClipboard(output.value);
       status.textContent = 'Copied to clipboard.';
       status.className = 'status success';
-    } catch {}
+    } catch { /* ignore */ }
   });
 }
 
@@ -1448,7 +1483,7 @@ function renderMorsePage(root, tool) {
       await copyToClipboard(output.value);
       status.textContent = 'Copied to clipboard.';
       status.className = 'status success';
-    } catch {}
+    } catch { /* ignore */ }
   });
 
   function playMorse(morse) {
@@ -1560,9 +1595,9 @@ function renderScanPage(root, tool) {
             status.className = 'status success';
             stopCamera();
           }
-        } catch (e) {
+        } catch {
           // Ignore errors during continuous scanning
-        }
+}
       }, 500);
     } catch (error) {
       status.textContent = 'Camera error: ' + error.message;
@@ -1618,6 +1653,232 @@ function renderScanPage(root, tool) {
   });
 }
 
+function renderLogPage(root, tool) {
+  root.innerHTML = renderShell({
+    currentPage: tool.id,
+    title: tool.title,
+    subtitle: tool.description,
+    content: createToolSection(
+      tool,
+      `
+        <div class="stack">
+          <textarea id="log-input" class="text-area" rows="10" placeholder="Paste server logs here..."></textarea>
+          <button id="log-analyze" class="btn">Analyze Logs</button>
+          <p id="log-status" class="status"></p>
+          <div id="log-results" class="stack" style="display:none;">
+            <h3>Suspicious IPs</h3>
+            <ul id="log-ips" class="match-list"></ul>
+            <h3>Anomalies & Failures</h3>
+            <ul id="log-anomalies" class="match-list"></ul>
+          </div>
+        </div>
+      `
+    )
+  });
+
+  const btn = root.querySelector('#log-analyze');
+  const input = root.querySelector('#log-input');
+  const status = root.querySelector('#log-status');
+  const resultsDiv = root.querySelector('#log-results');
+  const ipsList = root.querySelector('#log-ips');
+  const anomaliesList = root.querySelector('#log-anomalies');
+
+  btn.addEventListener('click', () => {
+    if (!input.value.trim()) return;
+    const results = analyzeLog(input.value);
+    
+    ipsList.innerHTML = results.suspiciousIps.length ? 
+      results.suspiciousIps.map(([ip, stats]) => `<li><strong>${ip}</strong>: ${stats.failCount} failures (${stats.count} total hits)</li>`).join('') :
+      '<li>No highly suspicious IPs found.</li>';
+      
+    const combined = [...results.failures, ...results.anomalies].slice(0, 50);
+    anomaliesList.innerHTML = combined.length ?
+      combined.map(a => `<li>Line ${a.line}: <code>${a.text}</code></li>`).join('') :
+      '<li>No clear anomalies found.</li>';
+      
+    status.textContent = `Analyzed ${results.totalLines} lines.`;
+    status.className = 'status success';
+    resultsDiv.style.display = 'block';
+  });
+}
+
+function renderHashIdPage(root, tool) {
+  root.innerHTML = renderShell({
+    currentPage: tool.id,
+    title: tool.title,
+    subtitle: tool.description,
+    content: createToolSection(
+      tool,
+      `
+        <div class="stack">
+          <input id="hashid-input" class="text-input" placeholder="Paste a hash string..." />
+          <button id="hashid-check" class="btn">Identify Hash</button>
+          <div id="hashid-results" class="result-block" style="display:none;"></div>
+        </div>
+      `
+    )
+  });
+
+  const btn = root.querySelector('#hashid-check');
+  const input = root.querySelector('#hashid-input');
+  const resultsDiv = root.querySelector('#hashid-results');
+
+  btn.addEventListener('click', () => {
+    if (!input.value.trim()) return;
+    const result = identifyHash(input.value);
+    
+    let html = `<h3>Identified Algorithms</h3><ul>`;
+    result.identities.forEach(id => {
+      html += `<li><strong>${id.name}</strong> - <span class="${id.danger.includes('High') ? 'status error' : 'status success'}" style="display:inline; padding: 2px 6px;">${id.danger}</span></li>`;
+    });
+    html += `</ul><p><strong>Entropy Score:</strong> ${result.entropy} bits</p>`;
+    html += `<p><strong>Analysis:</strong> ${result.warning}</p>`;
+    
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+  });
+}
+
+function renderUrlPage(root, tool) {
+  root.innerHTML = renderShell({
+    currentPage: tool.id,
+    title: tool.title,
+    subtitle: tool.description,
+    content: createToolSection(
+      tool,
+      `
+        <div class="stack">
+          <input id="url-input" class="text-input" placeholder="https://example.com/login" />
+          <button id="url-scan" class="btn">Scan URL</button>
+          <div id="url-results" class="result-block" style="display:none;"></div>
+        </div>
+      `
+    )
+  });
+
+  const btn = root.querySelector('#url-scan');
+  const input = root.querySelector('#url-input');
+  const resultsDiv = root.querySelector('#url-results');
+
+  btn.addEventListener('click', () => {
+    if (!input.value.trim()) return;
+    const result = scanUrl(input.value);
+    
+    if (result.error) {
+      resultsDiv.innerHTML = `<p class="status error">${result.error}</p>`;
+      resultsDiv.style.display = 'block';
+      return;
+    }
+    
+    let html = `<p><strong>Domain:</strong> ${result.domain}</p>`;
+    html += `<p><strong>Integration:</strong> ${result.safeBrowsing}</p>`;
+    html += `<h3>Heuristic Findings</h3><ul>`;
+    result.findings.forEach(f => {
+      const isHigh = f.type === 'High';
+      html += `<li><strong class="${isHigh ? 'status error' : 'status'}">${f.type}:</strong> ${f.msg}</li>`;
+    });
+    html += `</ul>`;
+    
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+  });
+}
+
+function renderMetaPage(root, tool) {
+  root.innerHTML = renderShell({
+    currentPage: tool.id,
+    title: tool.title,
+    subtitle: tool.description,
+    content: createToolSection(
+      tool,
+      `
+        <div class="stack">
+          <input id="meta-file" type="file" />
+          <div id="meta-results" class="result-block" style="display:none;"></div>
+        </div>
+      `
+    )
+  });
+
+  const fileInput = root.querySelector('#meta-file');
+  const resultsDiv = root.querySelector('#meta-results');
+
+  fileInput.addEventListener('change', async (e) => {
+    if (!e.target.files.length) return;
+    const result = await extractMetadata(e.target.files[0]);
+    
+    let html = `
+      <p><strong>Filename:</strong> ${result.name}</p>
+      <p><strong>Size:</strong> ${result.size}</p>
+      <p><strong>Type:</strong> ${result.type}</p>
+      <p><strong>Last Modified:</strong> ${result.lastModified}</p>
+    `;
+    if (result.extraInfo.length) {
+      html += `<h3>Additional Information</h3><ul>`;
+      result.extraInfo.forEach(info => {
+        html += `<li>${info}</li>`;
+      });
+      html += `</ul>`;
+    }
+    
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+  });
+}
+
+function renderLanPage(root, tool) {
+  root.innerHTML = renderShell({
+    currentPage: tool.id,
+    title: tool.title,
+    subtitle: tool.description,
+    content: createToolSection(
+      tool,
+      `
+        <div class="stack">
+          <button id="lan-scan" class="btn">Start Simulated Scan</button>
+          <p id="lan-status" class="status"></p>
+          <div id="lan-results" class="result-block" style="display:none;"></div>
+        </div>
+      `
+    )
+  });
+
+  const btn = root.querySelector('#lan-scan');
+  const status = root.querySelector('#lan-status');
+  const resultsDiv = root.querySelector('#lan-results');
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    status.textContent = 'Scanning network... (Simulation)';
+    status.className = 'status';
+    resultsDiv.style.display = 'none';
+    
+    const result = await simulateLanScan();
+    
+    status.textContent = 'Scan complete.';
+    status.className = 'status success';
+    
+    let html = `<p><strong>Network:</strong> ${result.networkInfo}</p>`;
+    html += `<table class="result-block" style="width:100%; text-align:left;">
+      <thead><tr><th>IP Address</th><th>MAC Address</th><th>Device Name</th><th>Status</th></tr></thead>
+      <tbody>`;
+      
+    result.devices.forEach(d => {
+      html += `<tr>
+        <td>${d.ip}</td>
+        <td>${d.mac}</td>
+        <td>${d.name} (${d.type})</td>
+        <td class="${d.status === 'Online' ? 'status success' : 'status error'}">${d.status}</td>
+      </tr>`;
+    });
+    
+    html += `</tbody></table>`;
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+    btn.disabled = false;
+  });
+}
+
 const PAGE_RENDERERS = {
   json: renderJsonPage,
   password: renderPasswordPage,
@@ -1637,7 +1898,12 @@ const PAGE_RENDERERS = {
   entropy: renderEntropyPage,
   escape: renderEscapePage,
   morse: renderMorsePage,
-  scan: renderScanPage
+  scan: renderScanPage,
+  log: renderLogPage,
+  'hash-id': renderHashIdPage,
+  url: renderUrlPage,
+  meta: renderMetaPage,
+  lan: renderLanPage
 };
 
 export function initSite(root, page) {

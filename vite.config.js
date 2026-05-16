@@ -21,7 +21,12 @@ const htmlEntries = [
   'entropy.html',
   'escape.html',
   'morse.html',
-  'scan.html'
+  'scan.html',
+  'log.html',
+  'hash-id.html',
+  'url.html',
+  'meta.html',
+  'lan.html'
 ];
 
 const cleanUrlPlugin = () => ({
@@ -29,7 +34,7 @@ const cleanUrlPlugin = () => ({
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
       const url = req.url.split('?')[0];
-      if (!url.includes('.') && url !== '/') {
+      if (!url.includes('.') && url !== '/' && !url.startsWith('/@')) {
         req.url = req.url.replace(url, url + '.html');
       }
       next();
